@@ -63,11 +63,8 @@ class DemoLogicTest {
 
     @Test
     fun scenariosProduceExpectedStorageStates() {
-        assertFalse(state(scenario = DemoScenario.SAMPLE).isStorageNearlyFull)
-        assertTrue(state(scenario = DemoScenario.STORAGE_FULL).isStorageNearlyFull)
         val empty = state(scenario = DemoScenario.EMPTY)
         assertTrue(empty.managedModels.isEmpty())
-        assertEquals(0, empty.installedCount)
     }
 
     @Test

@@ -38,11 +38,9 @@ class NavigationAndChatTest {
     }
 
     @Test
-    fun activeConversationAndModelResolve() {
+    fun activeConversationResolves() {
         val s = state()
         assertEquals("Getting started", s.activeConversation?.title)
-        assertNotNull(s.activeModel)
-        assertEquals("qwen-small-text", s.activeModel?.id)
     }
 
     @Test

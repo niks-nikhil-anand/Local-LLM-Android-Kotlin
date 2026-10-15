@@ -13,3 +13,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# llama.cpp checkout, fetched at a pinned commit by scripts/fetch-llama-cpp.sh
+/third_party/llama.cpp/
+
+# Signing material and locally signed artifacts must never be committed.
+*.jks
+*.keystore
+/app-release-signed.apk
+/app-release-signed.apk.idsig

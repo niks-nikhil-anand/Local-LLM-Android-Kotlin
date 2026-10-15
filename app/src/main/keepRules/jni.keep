@@ -1,0 +1,12 @@
+# Keep rules justified by JNI (see app/src/main/cpp/localai_llama.cpp).
+
+# JNI binds native functions by class and method name:
+#   Java_com_example_localai_data_inference_LlamaJni_native*
+-keep class com.example.localai.data.inference.LlamaJni {
+    native <methods>;
+}
+
+# Native code constructs this exception by name with the (int, String) constructor.
+-keep class com.example.localai.data.inference.NativeLlamaException {
+    <init>(int, java.lang.String);
+}

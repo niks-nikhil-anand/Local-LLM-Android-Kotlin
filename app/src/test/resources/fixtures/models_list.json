@@ -1,0 +1,59 @@
+[
+ {
+  "_id": "688b451a53e70a07b0669a7c",
+  "id": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+  "likes": 1149,
+  "private": false,
+  "downloads": 3445398,
+  "tags": [
+   "transformers",
+   "gguf",
+   "unsloth",
+   "qwen3",
+   "qwen",
+   "text-generation",
+   "arxiv:2505.09388",
+   "base_model:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+   "base_model:quantized:Qwen/Qwen3-Coder-30B-A3B-Instruct",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "imatrix",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation",
+  "library_name": "transformers",
+  "createdAt": "2025-07-31T10:27:38.000Z",
+  "modelId": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF"
+ },
+ {
+  "_id": "6a7e8ee8b77fccb497299fb3",
+  "id": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF",
+  "likes": 1582,
+  "private": false,
+  "downloads": 2536380,
+  "tags": [
+   "llama.cpp",
+   "gguf",
+   "uncensored",
+   "qwen3.8",
+   "mtp",
+   "speculative-decoding",
+   "imatrix",
+   "quantized",
+   "text-generation",
+   "en",
+   "zh",
+   "base_model:Qwen/Qwen3.8-27B",
+   "base_model:quantized:Qwen/Qwen3.8-27B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation",
+  "library_name": "llama.cpp",
+  "createdAt": "2026-08-14T03:43:36.000Z",
+  "modelId": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF"
+ }
+]

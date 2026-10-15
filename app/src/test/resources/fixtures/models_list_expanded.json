@@ -1,0 +1,59 @@
+[
+ {
+  "_id": "6aa38ae06caea5109aa0470f",
+  "id": "jialinyyzz/humanizer",
+  "author": "jialinyyzz",
+  "cardData": {
+   "license": "apache-2.0",
+   "base_model": "google/gemma-4-12B",
+   "base_model_relation": "finetune",
+   "language": [
+    "en",
+    "zh"
+   ],
+   "pipeline_tag": "text-generation",
+   "library_name": "gguf",
+   "tags": [
+    "humanizer",
+    "transformers",
+    "safetensors",
+    "text-rewriting",
+    "rewriting",
+    "paraphrase",
+    "style-transfer",
+    "gguf",
+    "llama.cpp",
+    "gemma4"
+   ]
+  },
+  "gated": false,
+  "lastModified": "2026-10-08T20:13:31.000Z",
+  "likes": 1578,
+  "trendingScore": 1075,
+  "downloads": 65616,
+  "tags": [
+   "gguf",
+   "safetensors",
+   "gemma4_unified",
+   "image-text-to-text",
+   "humanizer",
+   "transformers",
+   "text-rewriting",
+   "rewriting",
+   "paraphrase",
+   "style-transfer",
+   "llama.cpp",
+   "gemma4",
+   "text-generation",
+   "en",
+   "zh",
+   "base_model:google/gemma-4-12B",
+   "base_model:finetune:google/gemma-4-12B",
+   "license:apache-2.0",
+   "endpoints_compatible",
+   "region:us",
+   "conversational"
+  ],
+  "pipeline_tag": "text-generation"
+ }
+]

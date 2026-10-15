@@ -22,12 +22,20 @@ object Routes {
     // Secondary destinations
     const val SETTINGS = "settings"
     const val LIBRARY = "library"
+    const val LICENCES = "licences"
     const val SKILLS = "skills"
     const val SCHEDULED_TASKS = "scheduled_tasks"
     const val MODEL_ID_ARG = "modelId"
     const val DETAILS = "details/{$MODEL_ID_ARG}"
 
     fun details(modelId: String) = "details/$modelId"
+
+    // A real Hugging Face repository opened from Explore. Repo ids contain "/", so they travel
+    // URL-encoded in a query argument.
+    const val HF_REPO_ARG = "repo"
+    const val HF_MODEL = "hf_model?$HF_REPO_ARG={$HF_REPO_ARG}"
+
+    fun hfModel(repoId: String) = "hf_model?$HF_REPO_ARG=" + java.net.URLEncoder.encode(repoId, "UTF-8")
 }
 
 /** The four permanent bottom-navigation destinations, in display order. */

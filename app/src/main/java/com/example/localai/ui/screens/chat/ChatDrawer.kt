@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.example.localai.data.mock.MockModelRepository
 import com.example.localai.data.model.Conversation
 import com.example.localai.ui.components.LocalAILogo
 import com.example.localai.ui.components.SearchBar
@@ -111,7 +110,7 @@ fun ChatDrawer(
                             Column {
                                 Text(conversation.title, maxLines = 1)
                                 Text(
-                                    text = MockModelRepository.findModel(conversation.modelId)?.name ?: "Unknown model",
+                                    text = conversationSubtitle(conversation),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1
@@ -138,4 +137,14 @@ private fun DrawerLink(label: String, icon: ImageVector, onClick: () -> Unit) {
         icon = { Icon(icon, contentDescription = null) },
         label = { Text(label) }
     )
+}
+
+/** What produced a conversation's replies, from its messages (not from a model list). */
+internal fun conversationSubtitle(conversation: Conversation): String {
+    val replies = conversation.messages.filter { it.role == com.example.localai.data.model.ChatRole.ASSISTANT }
+    return when {
+        replies.isEmpty() -> "No replies yet"
+        replies.any { it.isDemo } -> "Sample conversation (pre-written)"
+        else -> replies.last().generatedBy?.let { "$it (on-device)" } ?: "On-device"
+    }
 }

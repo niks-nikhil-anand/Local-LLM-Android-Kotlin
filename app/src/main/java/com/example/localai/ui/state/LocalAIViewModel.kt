@@ -5,8 +5,15 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.localai.data.mock.MockChatRepository
 import com.example.localai.data.mock.MockModelRepository
-import com.example.localai.data.model.Attachment
-import com.example.localai.data.model.AttachmentKind
+import com.example.localai.data.attachment.Attachment
+import com.example.localai.data.attachment.ContentResolverDocumentReader
+import com.example.localai.data.attachment.DocumentReadResult
+import com.example.localai.data.attachment.DocumentReader
+import com.example.localai.data.attachment.TextDocuments
+import com.example.localai.data.websearch.WebSearchException
+import com.example.localai.data.websearch.WebSearchLimits
+import com.example.localai.data.websearch.WebSearchProvider
+import com.example.localai.data.model.SourceLink
 import com.example.localai.data.model.ChatMessage
 import com.example.localai.data.model.ChatRole
 import com.example.localai.data.model.Conversation
@@ -16,6 +23,15 @@ import com.example.localai.data.model.Modality
 import com.example.localai.data.model.PreferredModelSize
 import com.example.localai.data.model.SortOption
 import com.example.localai.data.prefs.ThemePreferenceStore
+import com.example.localai.data.CatalogServices
+import com.example.localai.data.inference.ActiveModel
+import com.example.localai.data.inference.EngineState
+import com.example.localai.data.inference.GenerationEvent
+import com.example.localai.data.inference.GenerationParams
+import com.example.localai.data.inference.InferenceException
+import com.example.localai.data.inference.ModelLoadStatus
+import com.example.localai.data.inference.ModelSessionManager
+import kotlinx.coroutines.flow.combine
 import com.example.localai.ui.theme.ThemeMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,19 +45,31 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Holds all demo state. Downloads and replies are simulated with timers; no files,
- * network access or models are involved.
+ * App-wide UI state. Chat replies come from the shared on-device model session; the Library,
+ * Skills and Scheduled-tasks screens and the legacy demo download list are still simulated.
  */
-class LocalAIViewModel(application: Application) : AndroidViewModel(application) {
+class LocalAIViewModel @JvmOverloads constructor(
+    application: Application,
+    /** Shared on-device model session; null only when none can be created. */
+    private val modelSession: ModelSessionManager? = runCatching { CatalogServices.modelSession(application) }.getOrNull(),
+    /** Reads documents the user picks; they never leave the device. */
+    private val documentReader: DocumentReader = ContentResolverDocumentReader(application),
+    /** Optional web search; used only for messages sent while the user has it switched on. */
+    private val webSearch: WebSearchProvider? = runCatching { CatalogServices.webSearch }.getOrNull()
+) : AndroidViewModel(application) {
 
     private val themeStore = ThemePreferenceStore(application)
 
     private val _uiState = MutableStateFlow(
         LocalAIUiState(
             installStates = MockModelRepository.initialInstallStates(DemoScenario.SAMPLE),
-            conversations = MockChatRepository.sampleConversations(),
+            // Sample history stays, explicitly marked as pre-written so it never reads as model output.
+            conversations = MockChatRepository.sampleConversations().map { c ->
+                c.copy(messages = c.messages.map { m -> if (m.role == ChatRole.ASSISTANT) m.copy(isDemo = true) else m })
+            },
             activeConversationId = "c-1",
-            enabledSkillIds = setOf("skill-summarize")
+            enabledSkillIds = setOf("skill-summarize"),
+            webSearchProvider = webSearch?.name
         )
     )
     val uiState: StateFlow<LocalAIUiState> = _uiState.asStateFlow()
@@ -53,6 +81,9 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
 
     private val downloadJobs = mutableMapOf<String, Job>()
     private val replyJobs = mutableMapOf<String, Job>()
+
+    /** Conversations whose reply is still waiting for web results (Stop cancels the search). */
+    private val searching = mutableSetOf<String>()
     private var nextMessageId = 1_000L
     private var nextConversationId = 5
     private var nextAttachmentId = 1L
@@ -62,6 +93,13 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
             themeStore.themeMode.collect { mode -> _uiState.update { it.copy(themeMode = mode) } }
         }
         resumeInitialDownloads()
+        modelSession?.let { session ->
+            viewModelScope.launch {
+                combine(session.engineState, session.active, session.loadStatus) { engine, active, status ->
+                    modelRuntimeState(engine, active, status)
+                }.collect { model -> _uiState.update { it.copy(chatModel = model) } }
+            }
+        }
     }
 
     // ---- Appearance ----
@@ -119,8 +157,8 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
         resumeInitialDownloads()
     }
 
-    /** Clears the simulated models and conversations. */
-    fun clearDemoData() {
+    /** Clears every conversation (they are kept in memory only); downloaded models are untouched. */
+    fun clearConversations() {
         cancelAllDownloads()
         replyJobs.values.forEach { it.cancel() }
         replyJobs.clear()
@@ -136,7 +174,7 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
                 historyQuery = ""
             )
         }
-        emit("Demo data cleared.")
+        emit("Conversations cleared.")
     }
 
     // ---- Chat ----
@@ -179,18 +217,47 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun selectChatModel(modelId: String) {
-        updateActiveConversation { it.copy(modelId = modelId) }
-    }
-
     fun setHistoryQuery(query: String) = _uiState.update { it.copy(historyQuery = query) }
 
-    fun toggleWebSearch() = _uiState.update { it.copy(webSearchEnabled = !it.webSearchEnabled) }
+    /**
+     * Switches web search on or off. The first time it is switched on, the user is asked to
+     * confirm what is sent and to whom; nothing is sent before that.
+     */
+    fun toggleWebSearch() {
+        val state = _uiState.value
+        when {
+            state.webSearchProvider == null -> emit("Web search is not available in this build.")
+            state.webSearchEnabled -> _uiState.update { it.copy(webSearchEnabled = false) }
+            state.webSearchConsented -> _uiState.update { it.copy(webSearchEnabled = true) }
+            else -> _uiState.update { it.copy(webSearchConsentPending = true) }
+        }
+    }
 
-    fun addAttachment(kind: AttachmentKind) {
-        val attachment = Attachment(nextAttachmentId++, kind, kind.sampleName)
-        _uiState.update { it.copy(pendingAttachments = it.pendingAttachments + attachment) }
-        emit("${kind.label} attachment added (simulated sample, no file was read).")
+    fun confirmWebSearch() = _uiState.update {
+        it.copy(webSearchConsented = true, webSearchEnabled = true, webSearchConsentPending = false)
+    }
+
+    fun dismissWebSearchConsent() = _uiState.update { it.copy(webSearchConsentPending = false) }
+
+    /** Reads a document picked with the system file picker and adds it to the next message. */
+    fun attachDocument(uri: String) {
+        if (_uiState.value.pendingAttachments.size >= TextDocuments.MAX_PENDING) {
+            emit("You can attach up to ${TextDocuments.MAX_PENDING} files to one message.")
+            return
+        }
+        _uiState.update { it.copy(readingAttachment = true) }
+        viewModelScope.launch {
+            try {
+                when (val result = documentReader.read(uri)) {
+                    is DocumentReadResult.Read -> _uiState.update {
+                        it.copy(pendingAttachments = it.pendingAttachments + Attachment(nextAttachmentId++, result.name, result.sizeBytes, result.text))
+                    }
+                    is DocumentReadResult.Rejected -> emit(result.reason)
+                }
+            } finally {
+                _uiState.update { it.copy(readingAttachment = false) }
+            }
+        }
     }
 
     fun removeAttachment(attachmentId: Long) {
@@ -199,42 +266,126 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Sends [text] to the loaded on-device model and streams the reply into a new assistant
+     * message. Attached documents are added to this turn as untrusted reference text, within the
+     * model's context. With web search on, only a query derived from [text] is sent to the search
+     * provider first. Without a loaded model nothing is generated (and no canned text is shown).
+     */
     fun sendMessage(text: String) {
         val trimmed = text.trim()
         val state = _uiState.value
         val conversationId = state.activeConversationId
-        if (trimmed.isEmpty() || conversationId in state.pendingReplies) return
+        if (trimmed.isEmpty() || conversationId in state.pendingReplies || state.readingAttachment) return
+        val session = modelSession
+        val model = state.chatModel as? ChatModelState.Ready
+        if (session == null || model == null) {
+            _uiState.update { it.copy(chatError = "Load a model in My Models before chatting.") }
+            return
+        }
+        val provider = webSearch?.takeIf { state.webSearchEnabled }
+        val budget = OnDeviceChat.referenceBudgetChars(model.contextLength)
+        val documents = OnDeviceChat.documentContext(
+            state.pendingAttachments,
+            if (provider != null) (budget - OnDeviceChat.WEB_RESULTS_CHARS).coerceAtLeast(0) else budget
+        )
+        val userId = nextMessageId++
         val userMessage = ChatMessage(
-            id = nextMessageId++,
+            id = userId,
             role = ChatRole.USER,
             text = trimmed,
-            attachments = state.pendingAttachments.map { it.name }
+            attachments = state.pendingAttachments.map { it.name },
+            promptContext = documents.text,
+            note = documents.notes.joinToString("\n").ifEmpty { null }
         )
-        val webSearch = state.webSearchEnabled
+        val replyId = nextMessageId++
+        val query = provider?.let { WebSearchLimits.queryFrom(trimmed) }
+        val reply = ChatMessage(
+            replyId, ChatRole.ASSISTANT, "", generatedBy = model.fileName,
+            note = query?.let { "Searching ${provider.name} for “$it”…" }
+        )
         _uiState.update {
-            it.copy(pendingAttachments = emptyList(), pendingReplies = it.pendingReplies + conversationId)
+            it.copy(pendingAttachments = emptyList(), pendingReplies = it.pendingReplies + conversationId, chatError = null)
         }
         updateConversation(conversationId) { conversation ->
             conversation.copy(
                 title = if (conversation.title == Conversation.NEW_CHAT_TITLE) trimmed.take(TITLE_LENGTH) else conversation.title,
-                messages = conversation.messages + userMessage
+                messages = conversation.messages + userMessage + reply
             )
         }
         replyJobs[conversationId]?.cancel()
         replyJobs[conversationId] = viewModelScope.launch {
-            delay(REPLY_DELAY_MS)
-            updateConversation(conversationId) { conversation ->
-                val replyCount = conversation.messages.count { it.role == ChatRole.ASSISTANT }
-                var replyText = MockChatRepository.replyFor(trimmed, replyCount)
-                if (webSearch) replyText += "\n\n${MockChatRepository.WEB_SEARCH_NOTE}"
-                conversation.copy(
-                    messages = conversation.messages +
-                        ChatMessage(nextMessageId++, ChatRole.ASSISTANT, replyText)
+            try {
+                val webNote = if (provider != null && query != null) {
+                    searching += conversationId
+                    try {
+                        searchTheWeb(provider, query, conversationId, userId, replyId, documents.text)
+                    } finally {
+                        searching -= conversationId
+                    }
+                } else null
+                val history = OnDeviceChat.promptHistory(
+                    _uiState.value.conversations.firstOrNull { it.id == conversationId }?.messages.orEmpty(),
+                    excludingId = replyId
                 )
+                OnDeviceChat.generateWithTrimming(history, { session.generate(it, GenerationParams()) }) { event ->
+                    when (event) {
+                        is GenerationEvent.Token -> updateMessage(conversationId, replyId) { it.copy(text = it.text + event.text) }
+                        is GenerationEvent.Finished -> updateMessage(conversationId, replyId) {
+                            it.copy(note = listOfNotNull(webNote, OnDeviceChat.finishedNote(event)).joinToString(" · "))
+                        }
+                    }
+                }
+            } catch (e: InferenceException) {
+                _uiState.update { it.copy(chatError = e.message ?: e.kind.description) }
+                updateMessage(conversationId, replyId) { it.copy(note = "Generation failed") }
+            } finally {
+                // An empty reply (failure or immediate stop) is removed instead of left blank.
+                updateConversation(conversationId) { c ->
+                    c.copy(messages = c.messages.filterNot { it.id == replyId && it.text.isBlank() })
+                }
+                _uiState.update { it.copy(pendingReplies = it.pendingReplies - conversationId) }
             }
-            _uiState.update { it.copy(pendingReplies = it.pendingReplies - conversationId) }
         }
     }
+
+    /**
+     * Runs the search and attaches the results to the user's turn (as untrusted text) and to the
+     * reply (as source links). A failed search is reported and the model answers without results.
+     */
+    private suspend fun searchTheWeb(
+        provider: WebSearchProvider,
+        query: String,
+        conversationId: String,
+        userId: Long,
+        replyId: Long,
+        documents: String?
+    ): String {
+        val results = try {
+            provider.search(query)
+        } catch (e: WebSearchException) {
+            updateMessage(conversationId, replyId) { it.copy(note = null) }
+            return "Web search failed (${e.message}); answered without web results"
+        }
+        updateMessage(conversationId, replyId) {
+            it.copy(note = null, sources = results.map { r -> SourceLink(r.title, r.url) })
+        }
+        if (results.isEmpty()) return "No ${provider.name} results for “$query”"
+        val block = OnDeviceChat.webResultsBlock(query, provider.name, results)
+        updateMessage(conversationId, userId) { it.copy(promptContext = listOfNotNull(documents, block).joinToString("\n\n")) }
+        return "Searched ${provider.name} for “$query”"
+    }
+
+    /** Stops the reply being generated; the text produced so far is kept. */
+    fun stopGeneration() {
+        val conversationId = _uiState.value.activeConversationId
+        if (conversationId in searching) replyJobs[conversationId]?.cancel() else modelSession?.stop()
+    }
+
+    fun dismissChatError() = _uiState.update { it.copy(chatError = null) }
+
+    private fun updateMessage(conversationId: String, messageId: Long, change: (ChatMessage) -> ChatMessage) =
+        updateConversation(conversationId) { c -> c.copy(messages = c.messages.map { if (it.id == messageId) change(it) else it }) }
 
     /** Clears the messages of the active conversation. */
     fun clearChat() {
@@ -255,13 +406,6 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ---- Settings ----
-
-    fun setDefaultModel(modelId: String) = _uiState.update { it.copy(defaultModelId = modelId) }
-
-    fun setPreferredSize(size: PreferredModelSize) = _uiState.update { it.copy(preferredSize = size) }
-
-    fun setAutoCompatibilityCheck(enabled: Boolean) =
-        _uiState.update { it.copy(autoCompatibilityCheck = enabled) }
 
     /** Shows a transient message, e.g. for an action that is not available in the demo. */
     fun showMessage(message: String) = emit(message)
@@ -317,7 +461,6 @@ class LocalAIViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private companion object {
-        const val REPLY_DELAY_MS = 600L
         const val DOWNLOAD_TICK_MS = 500L
         const val DOWNLOAD_STEP = 0.03f
         const val TITLE_LENGTH = 32

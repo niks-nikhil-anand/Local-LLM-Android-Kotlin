@@ -23,18 +23,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.example.localai.data.model.DeviceInfo
-import com.example.localai.data.model.RuntimeStatus
-import com.example.localai.data.model.formatSizeMb
 import com.example.localai.ui.theme.AppTheme
 
-/** Overview of (demo) device resources. Values are fake and labelled as such. */
+/**
+ * Overview of this device and the app's models. The caller passes display text for each tile;
+ * values come from measurements and real app state, say "Unavailable" rather than showing invented
+ * numbers, and are null while still loading (a text-shaped placeholder is shown instead).
+ */
 @Composable
 fun DeviceOverviewCard(
-    device: DeviceInfo,
-    freeStorageMb: Long,
-    installedCount: Int,
-    runtimeStatus: RuntimeStatus,
+    memory: String?,
+    storage: String?,
+    models: String?,
+    runtime: String?,
+    badge: String?,
     modifier: Modifier = Modifier
 ) {
     OutlinedCard(
@@ -53,39 +55,23 @@ fun DeviceOverviewCard(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                ModelMetadataChip(
-                    text = "Demo data",
-                    containerColor = AppTheme.extendedColors.infoContainer,
-                    contentColor = AppTheme.extendedColors.onInfoContainer
-                )
+                if (badge != null) {
+                    ModelMetadataChip(
+                        text = badge,
+                        containerColor = AppTheme.extendedColors.infoContainer,
+                        contentColor = AppTheme.extendedColors.onInfoContainer
+                    )
+                } else {
+                    SkeletonGroup("Measuring this device") { SkeletonChip(72.dp) }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile(
-                    icon = Icons.Outlined.Memory,
-                    label = "Memory",
-                    value = "${formatSizeMb(device.availableRamMb)} free of ${formatSizeMb(device.totalRamMb)}",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    icon = Icons.Outlined.Storage,
-                    label = "Storage",
-                    value = "${formatSizeMb(freeStorageMb)} free",
-                    modifier = Modifier.weight(1f)
-                )
+                StatTile(icon = Icons.Outlined.Memory, label = "Memory", value = memory, modifier = Modifier.weight(1f))
+                StatTile(icon = Icons.Outlined.Storage, label = "Storage", value = storage, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile(
-                    icon = Icons.Outlined.Inventory2,
-                    label = "Installed models",
-                    value = if (installedCount == 0) "None" else "$installedCount (demo)",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    icon = Icons.Outlined.PowerSettingsNew,
-                    label = "Runtime",
-                    value = runtimeStatus.label,
-                    modifier = Modifier.weight(1f)
-                )
+                StatTile(icon = Icons.Outlined.Inventory2, label = "Downloaded models", value = models, modifier = Modifier.weight(1f))
+                StatTile(icon = Icons.Outlined.PowerSettingsNew, label = "Runtime", value = runtime, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -95,7 +81,7 @@ fun DeviceOverviewCard(
 private fun StatTile(
     icon: ImageVector,
     label: String,
-    value: String,
+    value: String?,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.Top) {
@@ -112,11 +98,15 @@ private fun StatTile(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            if (value != null) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                SkeletonGroup("$label loading") { SkeletonText(MaterialTheme.typography.titleSmall, 96.dp) }
+            }
         }
     }
 }

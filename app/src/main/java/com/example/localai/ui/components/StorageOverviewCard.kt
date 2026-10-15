@@ -33,14 +33,15 @@ fun StorageOverviewCard(
     otherUsedMb: Long,
     totalMb: Long,
     nearlyFull: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    title: String = "Storage"
 ) {
     val freeMb = (totalMb - modelsUsedMb - otherUsedMb).coerceAtLeast(0)
     val modelsFraction by animateFloatAsState(modelsUsedMb.toFloat() / totalMb, label = "models")
     val otherFraction = otherUsedMb.toFloat() / totalMb
     val freeFraction = (1f - modelsFraction - otherFraction).coerceAtLeast(0.0001f)
     val summary = "Models ${formatSizeMb(modelsUsedMb)}, other data ${formatSizeMb(otherUsedMb)}, " +
-        "free ${formatSizeMb(freeMb)} of ${formatSizeMb(totalMb)}. Demo data."
+        "free ${formatSizeMb(freeMb)} of ${formatSizeMb(totalMb)}."
 
     OutlinedCard(
         modifier = modifier.fillMaxWidth(),
@@ -54,7 +55,7 @@ fun StorageOverviewCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Storage (demo data)",
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )

@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -42,7 +43,10 @@ fun ChatComposer(
     busy: Boolean = false,
     onAttach: (() -> Unit)? = null,
     onVoice: (() -> Unit)? = null,
-    topContent: (@Composable () -> Unit)? = null
+    topContent: (@Composable () -> Unit)? = null,
+    /** When set and [busy], the send button becomes a Stop button. */
+    onStop: (() -> Unit)? = null,
+    placeholder: String = "Message (demo chat)"
 ) {
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
         Column {
@@ -71,7 +75,7 @@ fun ChatComposer(
                     ) {
                         if (value.isEmpty()) {
                             Text(
-                                text = "Message (demo chat)",
+                                text = placeholder,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -90,22 +94,34 @@ fun ChatComposer(
                     }
                     if (onVoice != null && value.isBlank()) {
                         IconButton(onClick = onVoice, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Outlined.Mic, contentDescription = "Voice input (demo)")
+                            Icon(Icons.Outlined.Mic, contentDescription = "Voice input")
                         }
                     }
-                    FilledIconButton(
-                        onClick = onSend,
-                        enabled = value.isNotBlank() && !busy,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .padding(start = 4.dp)
-                            .size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send message",
-                            modifier = Modifier.size(20.dp)
-                        )
+                    if (busy && onStop != null) {
+                        FilledIconButton(
+                            onClick = onStop,
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .size(40.dp)
+                        ) {
+                            Icon(Icons.Filled.Stop, contentDescription = "Stop generating", modifier = Modifier.size(20.dp))
+                        }
+                    } else {
+                        FilledIconButton(
+                            onClick = onSend,
+                            enabled = value.isNotBlank() && !busy,
+                            shape = CircleShape,
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send message",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }

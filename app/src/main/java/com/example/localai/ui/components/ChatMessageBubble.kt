@@ -15,6 +15,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.StopCircle
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
+import com.example.localai.data.model.SourceLink
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +65,10 @@ fun parseMessageSegments(raw: String): List<MessageSegment> {
 fun ChatMessageBubble(
     message: ChatMessage,
     onCopy: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Reads the message aloud or stops reading; null hides the button. */
+    onReadAloud: (() -> Unit)? = null,
+    readingAloud: Boolean = false
 ) {
     val isUser = message.role == ChatRole.USER
     val roleLabel = if (isUser) "You" else "Assistant"
@@ -75,7 +85,12 @@ fun ChatMessageBubble(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Text(
-                text = if (isUser) roleLabel else "$roleLabel · Demo response",
+                text = when {
+                    isUser -> roleLabel
+                    message.isDemo -> "$roleLabel · Demo response (pre-written)"
+                    message.generatedBy != null -> "$roleLabel · ${message.generatedBy} (on-device)"
+                    else -> roleLabel
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -103,14 +118,58 @@ fun ChatMessageBubble(
                     }
                 }
             }
-            IconButton(onClick = { onCopy(message.text) }) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentCopy,
-                    contentDescription = "Copy message",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
+            if (message.sources.isNotEmpty()) Sources(message.sources)
+            message.note?.let { note ->
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
+            Row {
+                IconButton(onClick = { onCopy(message.text) }) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy message",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                if (onReadAloud != null) {
+                    IconButton(onClick = onReadAloud) {
+                        Icon(
+                            imageVector = if (readingAloud) Icons.Outlined.StopCircle else Icons.AutoMirrored.Outlined.VolumeUp,
+                            contentDescription = if (readingAloud) "Stop reading aloud" else "Read aloud",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Web pages given to the model for this reply. Only https links are opened, in the browser. */
+@Composable
+private fun Sources(sources: List<SourceLink>) {
+    val uriHandler = LocalUriHandler.current
+    Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Sources (web results, unverified)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        sources.forEachIndexed { i, source ->
+            val openable = source.url.startsWith("https://")
+            Text(
+                text = "${i + 1}. ${source.title}",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (openable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                textDecoration = if (openable) TextDecoration.Underline else null,
+                modifier = if (openable) {
+                    Modifier
+                        .clickable(role = Role.Button, onClickLabel = "Open ${source.url}") { uriHandler.openUri(source.url) }
+                        .padding(vertical = 4.dp)
+                } else Modifier.padding(vertical = 4.dp)
+            )
         }
     }
 }

@@ -27,11 +27,6 @@ enum class DemoScenario(val label: String) {
     STORAGE_FULL("Storage full")
 }
 
-enum class RuntimeStatus(val label: String) {
-    IDLE("Demo mode"),
-    NOT_LOADED("No model loaded")
-}
-
 enum class PreferredModelSize(val label: String) {
     SMALL("Small"),
     MEDIUM("Medium"),
